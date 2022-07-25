@@ -29,6 +29,7 @@ License
 #include "addToRunTimeSelectionTable.H"
 #include "volFields.H"
 #include "surfaceFields.H"
+#include <iostream>
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
@@ -146,6 +147,7 @@ Foam::agentRotatingWallVelocityFvPatchVectorField::
 
 void Foam::agentRotatingWallVelocityFvPatchVectorField::updateCoeffs()
 {
+    Info << "begin: updateCoeffs()" << endl;
     if (updated())
     {
         return;
@@ -168,6 +170,7 @@ void Foam::agentRotatingWallVelocityFvPatchVectorField::updateCoeffs()
             control_time_ = t;
 
             const fvPatchField<scalar> &p = patch().lookupPatchField<volScalarField, scalar>("p");
+            
             // Create lists of the variables on each processor so that they can be gathered onto the master processor later.
             List<scalar> pList(p.size());
 
@@ -181,30 +184,36 @@ void Foam::agentRotatingWallVelocityFvPatchVectorField::updateCoeffs()
             // number of processors.
             List< List<scalar> > gatheredValues(Pstream::nProcs());
 
+            List<scalar> pListSize(Pstream::nProcs());
+ 
             //  Populate and gather the stuff onto the master processor.
             gatheredValues[Pstream::myProcNo()] = pList;
+            pListSize[Pstream::myProcNo()] = pList.size();
+       
             Pstream::gatherList(gatheredValues);
-
+           
             if (Pstream::master()) //only run on the master
             {
                 // creating the feature vector
                 int size = 0;
                 for (int i = 0; i < gatheredValues.size(); i++)
                 {
-                    size += gatheredValues[i].size();
+                    size += pListSize[i];
                 }
+               
                 torch::Tensor features = torch::zeros({ 1, size }, torch::kFloat64);
                 int k = 0;
                 std::vector<scalar> pvec(size);
                 for (int i = 0; i < gatheredValues.size(); i++)
                 {
-                    for (int j = 0; j < gatheredValues[i].size(); j++)
+                    for (int j = 0; j < pListSize[i]; j++)
                     {
                         features[0][k] = gatheredValues[i][j];
                         pvec[k] = gatheredValues[i][j];
                         k++;
                     }
                 }
+                
                 std::vector<torch::jit::IValue> policyFeatures{features};
                 torch::Tensor dist_parameters = policy_.forward(policyFeatures).toTensor();
                 scalar alpha = dist_parameters[0][0].item<double>();
@@ -212,12 +221,14 @@ void Foam::agentRotatingWallVelocityFvPatchVectorField::updateCoeffs()
                 std::gamma_distribution<double> distribution_1(alpha, 1.0);
                 std::gamma_distribution<double> distribution_2(beta, 1.0);
                 scalar omega_pre_scale;
+
                 if (train_)
                 {
                     // sample from Beta distribution during training
                     double number_1 = distribution_1(gen_);
                     double number_2 = distribution_2(gen_);
                     omega_pre_scale = number_1 / (number_1 + number_2);
+
                 }
                 else
                 {
@@ -234,6 +245,7 @@ void Foam::agentRotatingWallVelocityFvPatchVectorField::updateCoeffs()
                 scalar log_p = log(omega_pre_scale) * (alpha - 1.0) + log(1 - omega_pre_scale) * (beta - 1.0) + std::lgamma(alpha + beta) - (std::lgamma(alpha) + std::lgamma(beta));
                 saveTrajectory(log_p, entropy, mean, log_std, alpha, beta, pvec, size);
                 Info << "New omega: " << omega_ << "; old value: " << omega_old_ << "\n";
+
             }
             Pstream::scatter(omega_);
 
@@ -260,15 +272,16 @@ void Foam::agentRotatingWallVelocityFvPatchVectorField::updateCoeffs()
 
     // Remove the component of Up normal to the wall
     // just in case it is not exactly circular
-
     const vectorField n(patch().nf());
     vectorField::operator=(Up - n * (n & Up));
 
     fixedValueFvPatchVectorField::updateCoeffs();
+    Info << "end: updateCoeffs()" << endl;
 }
 
 void Foam::agentRotatingWallVelocityFvPatchVectorField::write(Ostream &os) const
 {
+    Info << "write(Ostream &os) begin" << endl;
     fvPatchVectorField::write(os);
     os.writeEntry("origin", origin_);
     os.writeEntry("axis", axis_);

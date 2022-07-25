@@ -103,5 +103,5 @@ class LocalBuffer(Buffer):
         #proc[buffer_counter] = subprocess.Popen(f'./wait.sh', cwd=f'{join(os.getcwd(), env.path)}')
         proc[buffer_counter] = subprocess.Popen([f'{env.run_script}'], cwd=f'{join(os.getcwd(), env.path)}')
        
-        _thread.start_new_thread(self.process_waiter,
+        _thread.start_new_thread(self.process_waiter
                                  (proc[buffer_counter], f"runner_{buffer_counter}", results))
