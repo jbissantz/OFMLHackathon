@@ -1,3 +1,5 @@
+import sys
+sys.path.insert(0, "src")
 
 from python.buffer import LocalBuffer
 from python.agent import PPOAgent
@@ -7,12 +9,8 @@ from shutil import copytree
 import os
 from os import makedirs
 from os.path import join
-import sys
 from typing import List
 from torch import Tensor
-
-sys.path.insert(0, "src")
-
 
 def print_statistics(actions: List[Tensor], rewards: List[Tensor]):
     rt = [r.mean().item() for r in rewards]
@@ -30,8 +28,8 @@ def main():
     # setting
     training_path = "test_training"
     epochs = 10
-    buffer_size = 2
-    n_runners = 2
+    buffer_size = 1
+    n_runners = 1
 
     # create a directory for training
     makedirs(training_path, exist_ok=True)
@@ -41,7 +39,7 @@ def main():
              join(training_path, "base"), dirs_exist_ok=True)
     env = RotatingCylinder2D()
     env.path = join(training_path, "base")
-    env.end_time = 6.
+    env.end_time = 4.1
     env.reset()
 
     # create a trajectory buffer
